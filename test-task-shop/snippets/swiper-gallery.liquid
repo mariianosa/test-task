@@ -1,0 +1,290 @@
+{%- liquid
+  assign p = product
+  if p == blank and closest and closest.product
+    assign p = closest.product
+  endif
+  if p == blank and prod
+    assign p = prod
+  endif
+
+  assign slides_desktop = slides_desktop | default: 1
+  assign slides_tablet = slides_tablet | default: 1
+  assign slides_mobile = slides_mobile | default: 1
+  assign space_between = space_between | default: 8
+
+  if enable_pagination == null
+    assign enable_pagination = true
+  endif
+  if enable_navigation == null
+    assign enable_navigation = true
+  endif
+
+  assign images_count = 0
+  if p
+    assign images_count = p.images | size
+  endif
+
+  assign id_suffix = section.id | default: p.id
+  assign gid = 'pg-' | append: id_suffix
+
+  assign use_swiper = enable_pagination
+-%}
+
+{%- if p and images_count > 0 -%}
+  {% capture gallery_items %}
+    {%- for image in p.images -%}
+      <li class="{% if use_swiper %}swiper-slide prod-gallery__item{% else %}prod-gallery__static-item{% endif %}">
+        {{
+          image
+          | image_url: width: 1200
+          | image_tag:
+            loading: 'lazy',
+            alt: p.title,
+            class: 'prod-gallery__img',
+            widths: '360, 540, 720, 900, 1200',
+            sizes: '(min-width: 1024px) 600px, (min-width: 768px) 50vw, 90vw'
+        }}
+      </li>
+    {%- endfor -%}
+  {% endcapture %}
+
+  <div
+    id="{{ gid }}"
+    class="prod-gallery {% unless use_swiper %}prod-gallery--static{% endunless %}"
+    data-slides-desktop="{{ slides_desktop }}"
+    data-slides-tablet="{{ slides_tablet }}"
+    data-slides-mobile="{{ slides_mobile }}"
+    data-space-between="{{ space_between }}"
+    data-enable-pagination="{{ enable_pagination }}"
+    data-enable-navigation="{{ enable_navigation }}"
+    style="--pg-cols-desktop: {{ slides_desktop }}; --pg-cols-tablet: {{ slides_tablet }}; --pg-cols-mobile: {{ slides_mobile }}; --pg-gap: {{ space_between }}px;"
+  >
+    {% if use_swiper %}
+      <div class="swiper prod-gallery__swiper">
+        <ul class="swiper-wrapper prod-gallery__list">
+          {{ gallery_items }}
+        </ul>
+
+        {% if enable_pagination %}
+          <div class="swiper-pagination"></div>
+        {% endif %}
+        {% if enable_navigation %}
+          <div class="swiper-button-prev"></div>
+          <div class="swiper-button-next"></div>
+        {% endif %}
+      </div>
+    {% else %}
+      <ul class="prod-gallery__static-list">
+        {{ gallery_items }}
+      </ul>
+    {% endif %}
+  </div>
+
+  <script>
+    (function () {
+      var root = document.getElementById('{{ gid }}');
+      if (!root) return;
+
+      function parseBool(v) {
+        if (typeof v === 'boolean') return v;
+        return String(v).toLowerCase() === 'true';
+      }
+
+      function initSwiper() {
+        var pg = parseBool(root.dataset.enablePagination);
+        if (!pg) {
+          root.dataset.swiperInited = '0';
+          return;
+        }
+
+        if (!root || root.dataset.swiperInited === '1' || typeof window.Swiper === 'undefined') return;
+
+        var ds = Number(root.dataset.slidesDesktop || 1);
+        var ts = Number(root.dataset.slidesTablet || 1);
+        var ms = Number(root.dataset.slidesMobile || 1);
+        var sp = Number(root.dataset.spaceBetween || 8);
+        var nv = parseBool(root.dataset.enableNavigation);
+
+        var swiperEl = root.querySelector('.prod-gallery__swiper');
+        if (!swiperEl) return;
+
+        root._swiper = new Swiper(swiperEl, {
+          slidesPerView: ms,
+          spaceBetween: sp,
+          watchOverflow: true,
+          grabCursor: true,
+          pagination: { el: root.querySelector('.swiper-pagination'), clickable: true },
+          navigation: nv
+            ? {
+                nextEl: root.querySelector('.swiper-button-next'),
+                prevEl: root.querySelector('.swiper-button-prev'),
+              }
+            : false,
+          breakpoints: {
+            768: { slidesPerView: ts, spaceBetween: sp },
+            1024: { slidesPerView: ds, spaceBetween: sp },
+          },
+        });
+
+        root.dataset.swiperInited = '1';
+      }
+
+      function ensureSwiperThenInit() {
+        if (String(root.dataset.enablePagination).toLowerCase() === 'false') return;
+
+        if (typeof window.Swiper !== 'undefined') {
+          initSwiper();
+          return;
+        }
+
+        if (!document.querySelector('script[data-swiper-loader]')) {
+          var s = document.createElement('script');
+          s.src = "{{ 'swiper-bundle.min.js' | asset_url }}";
+          s.defer = true;
+          s.setAttribute('data-swiper-loader', '1');
+          s.onload = initSwiper;
+          document.head.appendChild(s);
+        }
+
+        window.addEventListener('load', initSwiper);
+        var tries = 0;
+        var iv = setInterval(function () {
+          tries++;
+          if (typeof window.Swiper !== 'undefined') {
+            clearInterval(iv);
+            initSwiper();
+          }
+          if (tries > 20) clearInterval(iv);
+        }, 150);
+      }
+
+      ensureSwiperThenInit();
+
+      document.addEventListener('shopify:section:load', function () {
+        var newRoot = document.getElementById('{{ gid }}');
+        if (!newRoot) return;
+        root = newRoot;
+        root.dataset.swiperInited = '';
+        ensureSwiperThenInit();
+      });
+    })();
+  </script>
+
+  <style>
+    .prod-gallery {
+      --pg-nav-size: 42px;
+      --pg-nav-bg: #000;
+      --pg-nav-color: #fff;
+      --pg-img-maxw: 85%;
+      --pg-side-padding: 40px;
+    }
+    .prod-gallery__img {
+      display: block;
+      max-width: var(--pg-img-maxw);
+      max-height: 100%;
+      width: auto;
+      height: 100%;
+      object-fit: contain;
+      margin: 0 auto;
+    }
+
+    .prod-gallery__list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .prod-gallery__swiper {
+      position: relative;
+      padding-inline: var(--pg-side-padding);
+    }
+    .prod-gallery__item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1 / 1;
+    }
+
+    .swiper-button-prev,
+    .swiper-button-next {
+      width: var(--pg-nav-size);
+      height: var(--pg-nav-size);
+      border-radius: 9999px;
+      background: var(--pg-nav-bg);
+      color: var(--pg-nav-color);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 2;
+    }
+    .swiper-button-prev::after,
+    .swiper-button-next::after {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .swiper-button-prev {
+      left: 8px;
+    }
+    .swiper-button-next {
+      right: 8px;
+    }
+    .swiper-button-prev:hover,
+    .swiper-button-next:hover {
+      filter: brightness(1.08);
+      transform: translateY(-50%) scale(1.04);
+    }
+    .swiper-button-disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .swiper-pagination {
+      bottom: 8px !important;
+    }
+    .swiper-pagination-bullet {
+      background: #000;
+      opacity: 0.25;
+    }
+    .swiper-pagination-bullet-active {
+      opacity: 1;
+    }
+
+    .prod-gallery--static .prod-gallery__static-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(var(--pg-cols-mobile), minmax(0, 1fr));
+    }
+    .prod-gallery--static .prod-gallery__static-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1 / 1;
+    }
+    @media (min-width: 768px) {
+      .prod-gallery--static .prod-gallery__static-list {
+        grid-template-columns: repeat(var(--pg-cols-tablet), minmax(0, 1fr));
+      }
+      .prod-gallery {
+        --pg-nav-size: 46px;
+        --pg-img-maxw: 80%;
+        --pg-side-padding: 48px;
+      }
+    }
+    @media (min-width: 1024px) {
+      .prod-gallery--static .prod-gallery__static-list {
+        grid-template-columns: repeat(var(--pg-cols-desktop), minmax(0, 1fr));
+      }
+      .prod-gallery {
+        --pg-nav-size: 48px;
+        --pg-img-maxw: 78%;
+        --pg-side-padding: 56px;
+      }
+    }
+    .prod-gallery--static .swiper-button-prev,
+    .prod-gallery--static .swiper-button-next,
+    .prod-gallery--static .swiper-pagination {
+      display: none !important;
+    }
+  </style>
+{%- endif -%}
