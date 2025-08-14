@@ -175,6 +175,12 @@ export default class VariantPicker extends Component {
                 newProduct,
               })
             );
+             const currentColor = window.currentSelectedColor;
+            if (currentColor && typeof window.filterByColor === 'function') {
+              requestAnimationFrame(() => requestAnimationFrame(() => {
+                window.filterByColor(currentColor);
+              }));
+            }
           }
         }
       })
@@ -198,33 +204,41 @@ export default class VariantPicker extends Component {
    * @param {Document} newHtml - The new HTML.
    * @returns {NewProduct | undefined} Information about the new product if it has changed, otherwise undefined.
    */
-  updateVariantPicker(newHtml) {
-    /** @type {NewProduct | undefined} */
-    let newProduct;
+updateVariantPicker(newHtml) {
+  /** @type {NewProduct | undefined} */
+  let newProduct;
 
-    const newVariantPickerSource = newHtml.querySelector(this.tagName.toLowerCase());
+  const newVariantPickerSource = newHtml.querySelector(this.tagName.toLowerCase());
 
-    if (!newVariantPickerSource) {
-      throw new Error('No new variant picker source found');
-    }
-
-    // For combined listings, the product might have changed, so update the related data attribute.
-    if (newVariantPickerSource instanceof HTMLElement) {
-      const newProductId = newVariantPickerSource.dataset.productId;
-      const newProductUrl = newVariantPickerSource.dataset.productUrl;
-
-      if (newProductId && newProductUrl && this.dataset.productId !== newProductId) {
-        newProduct = { id: newProductId, url: newProductUrl };
-      }
-
-      this.dataset.productId = newProductId;
-      this.dataset.productUrl = newProductUrl;
-    }
-
-    morph(this, newVariantPickerSource);
-
-    return newProduct;
+  if (!newVariantPickerSource) {
+    throw new Error('No new variant picker source found');
   }
+
+  if (newVariantPickerSource instanceof HTMLElement) {
+    const newProductId = newVariantPickerSource.dataset.productId;
+    const newProductUrl = newVariantPickerSource.dataset.productUrl;
+
+    if (newProductId && newProductUrl && this.dataset.productId !== newProductId) {
+      newProduct = { id: newProductId, url: newProductUrl };
+    }
+
+    this.dataset.productId = newProductId;
+    this.dataset.productUrl = newProductUrl;
+  }
+
+  morph(this, newVariantPickerSource);
+
+  requestAnimationFrame(() => {
+    const currentColor = window.currentSelectedColor;
+    if (currentColor && typeof window.filterByColor === 'function') {
+      window.filterByColor(currentColor);
+    }
+  });
+  // =================================
+
+  return newProduct;
+}
+
 
   /**
    * Re-renders the entire main content.

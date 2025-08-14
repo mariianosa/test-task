@@ -1,5 +1,3 @@
-
-
 {% assign block_settings = block.settings %}
 
 {%- if block_settings.zoom -%}
@@ -79,6 +77,16 @@
       assign icons_position = 'left'
     endif
   endif
+-%}
+{%- liquid
+  assign color_values = blank
+  for opt in selected_product.options_with_values
+    assign nm = opt.name | downcase
+    if nm == 'color' or nm == 'colour'
+      assign color_values = opt.values
+      break
+    endif
+  endfor
 -%}
 
 {%- liquid
@@ -296,19 +304,73 @@
     {% for media in sorted_media %}
       {% capture children %}
         {%- liquid
-            if needs_both_sizes and forloop.first
-              assign media_sizes = sizes_single
-            else
-              assign media_sizes = sizes
-            endif
-        -%}
-        {% if block_settings.aspect_ratio != 'adapt' and block_settings.constrain_to_viewport %}
-          <div class="product-media-constraint-wrapper">
-            {%- render 'product-media', media: media, sizes: media_sizes, is_main_product_media: forloop.first -%}
-          </div>
-        {% else %}
-          {%- render 'product-media', media: media, sizes: media_sizes, is_main_product_media: forloop.first -%}
-        {% endif %}
+  if needs_both_sizes and forloop.first
+    assign media_sizes = sizes_single
+  else
+    assign media_sizes = sizes
+  endif
+
+  assign alt_down = media.alt | downcase
+assign color_token = ''
+if alt_down != blank and color_values
+  for cv in color_values
+    assign cv_down = cv | downcase
+    if alt_down contains cv_down
+      assign color_token = cv_down
+      break
+    endif
+  endfor
+endif
+
+-%}
+
+{% if block_settings.aspect_ratio != 'adapt' and block_settings.constrain_to_viewport %}
+  <div class="product-media-constraint-wrapper">
+    {%- render 'product-media', media: media, sizes: media_sizes, is_main_product_media: forloop.first -%}
+  </div>
+{% else %}
+  {%- render 'product-media', media: media, sizes: media_sizes, is_main_product_media: forloop.first -%}
+{% endif %}
+
+{%- capture class -%}
+  {{ product_media_container_class }} product-media-container--{{ media.media_type }}{% if block.settings.zoom %} product-media-container--zoomable{% endif %}{% if forloop.index0 == lowest_aspect_ratio_index and block.settings.aspect_ratio == 'adapt' %} product-media-container--tallest{% endif %}
+{%- endcapture -%}
+
+{%- if block_settings.aspect_ratio == 'adapt' -%}
+  {%- capture style -%}
+    --media-preview-ratio: {{ media.preview_image.aspect_ratio | default: 1.0 }};
+  {%- endcapture -%}
+{%- endif -%}
+
+{%- capture attributes -%}
+  data-color-token="{{ color_token }}"
+  {%- if block_settings.zoom and media.media_type == 'model' -%}
+  {%- elsif block_settings.zoom -%}
+    on:click="#zoom-dialog-{{ block.id }}/open/{{ forloop.index0 }}"
+  {%- endif -%}
+  {%- if settings.transition_to_main_product and forloop.first -%}
+    data-view-transition-type="product-image-transition"
+  {%- endif -%}
+{%- endcapture -%}
+{%- liquid
+  if needs_both_sizes and forloop.first
+    assign media_sizes = sizes_single
+  else
+    assign media_sizes = sizes
+  endif
+
+  assign alt_down = media.alt | downcase
+  assign color_token = ''
+  if alt_down != blank and color_values
+    for cv in color_values
+      assign cv_down = cv | downcase
+      if alt_down contains cv_down
+        assign color_token = cv_down
+        break
+      endif
+    endfor
+  endif
+-%}
       {% endcapture %}
       {% capture class %}
         {{ product_media_container_class }} product-media-container--{{ media.media_type }}{% if block.settings.zoom %} product-media-container--zoomable{% endif %}{% if forloop.index0 == lowest_aspect_ratio_index and block.settings.aspect_ratio == 'adapt' %} product-media-container--tallest{% endif %}
@@ -317,11 +379,6 @@
         {% capture style %}
           --media-preview-ratio: {{ media.preview_image.aspect_ratio | default: 1.0 }};
         {% endcapture %}
-      {% endif %}
-      {% if block_settings.zoom and media.media_type == 'model' %}
-        {%- capture attributes -%}"{% if settings.transition_to_main_product and forloop.first %} data-view-transition-type="product-image-transition"{% endif %}{% endcapture -%}
-      {% elsif block_settings.zoom %}
-        {%- capture attributes -%}on:click="#zoom-dialog-{{ block.id }}/open/{{ forloop.index0 }}"{% if settings.transition_to_main_product and forloop.first %} data-view-transition-type="product-image-transition"{% endif %}{% endcapture -%}
       {% endif %}
 
       {% render 'slideshow-slide',
@@ -383,9 +440,17 @@
       data-testid="media-gallery-grid"
     >
       {% for media in sorted_media %}
+        {%- liquid
+          assign alt_down = media.alt | downcase
+          assign color_token = ''
+          if alt_down != blank
+            assign color_token = alt_down | split: '_' | first | split: ' ' | first | strip
+          endif
+        -%}
         <li
           ref="media[]"
           class="{{ product_media_container_class }} product-media-container--{{ media.media_type }}"
+          data-color-token="{{ color_token }}"
           style="{% if block_settings.aspect_ratio == 'adapt' %} --media-preview-ratio: {{ media.preview_image.aspect_ratio | default: 1.0 }};{% endif %}"
           {% if settings.transition_to_main_product and forloop.first %}
             data-view-transition-type="product-image-transition"
@@ -452,6 +517,13 @@
                     assign aspect_ratio = media.preview_image.aspect_ratio | default: 1.0
                   endif
                 %}
+                {%- liquid
+                  assign alt_down = media.alt | downcase
+                  assign color_token = ''
+                  if alt_down != blank
+                    assign color_token = alt_down | split: '_' | first | split: ' ' | first | strip
+                  endif
+                -%}
                 <button
                   type="button"
                   class="button button-unstyled dialog-thumbnails-list__thumbnail"
@@ -482,6 +554,13 @@
           class="dialog-zoomed-gallery list-unstyled"
         >
           {%- for media in sorted_media -%}
+            {%- liquid
+              assign alt_down = media.alt | downcase
+              assign color_token = ''
+              if alt_down != blank
+                assign color_token = alt_down | split: '_' | first | split: ' ' | first | strip
+              endif
+            -%}
             <li
               id="product-{{ media.id}}-{{ forloop.index }}"
               class="{{ product_media_container_class }} product-media-container--{{ media.media_type }}{% if media.media_type == 'image' %} product-media-container--zoomable{% endif %}"
@@ -555,6 +634,68 @@
     </script>
   {%- endif -%}
 </media-gallery>
+<script>
+  (function () {
+    function slug(s) {
+      return (s || '').toString().trim().toLowerCase();
+    }
+
+    const sectionEl = document.querySelector('[data-section-id="{{ section.id }}"]') || document;
+    const galleryRoot = sectionEl.querySelector('media-gallery');
+    if (!galleryRoot) return;
+
+    function getFilterables() {
+      return Array.from(sectionEl.querySelectorAll('[data-color-token]'));
+    }
+
+    function getSelectedColor() {
+      const radio = sectionEl.querySelector(
+        'input[type="radio"][name^="Color-"]:checked, input[type="radio"][name^="Colour-"]:checked'
+      );
+      if (radio) return radio.value;
+      const sel = sectionEl.querySelector('select[name="options[Color]"], select[name="options[Colour]"]');
+      if (sel) return sel.value;
+      return null;
+    }
+
+    window.currentSelectedColor = null;
+
+    function filterByColor(colorValue) {
+      window.currentSelectedColor = colorValue;
+      const c = slug(colorValue);
+      let anyShown = false;
+
+      getFilterables().forEach((el) => {
+        const token = (el.getAttribute('data-color-token') || '').trim().toLowerCase();
+        if (token && token === c) {
+          el.style.display = '';
+          anyShown = true;
+        } else {
+          el.style.display = 'none';
+        }
+      });
+    }
+
+    window.filterByColor = filterByColor;
+
+    const variantPicker = sectionEl.querySelector('variant-picker[data-section-id="{{ section.id }}"]');
+
+    function scheduleFilter() {
+      const col = getSelectedColor();
+      if (!col) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => filterByColor(col)));
+    }
+    variantPicker?.addEventListener('variant:update', scheduleFilter);
+    variantPicker?.addEventListener('variant:updated', scheduleFilter);
+    variantPicker?.addEventListener('variantupdate', scheduleFilter);
+    variantPicker?.addEventListener('VariantUpdateEvent', scheduleFilter);
+
+    const mo = new MutationObserver(() => scheduleFilter());
+    mo.observe(sectionEl, { childList: true, subtree: true });
+
+    window.addEventListener('load', scheduleFilter);
+  })();
+</script>
 
 {% stylesheet %}
   .dialog-zoomed-gallery {

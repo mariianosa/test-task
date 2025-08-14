@@ -51,6 +51,12 @@
             assign option_id_attribute = 'data-option-id="' | append: fieldset_id | append: '"'
             assign longest_value = 0
           endif
+
+          assign opt_name_down = product_option.name | downcase | strip
+          assign is_color_option = false
+          if opt_name_down == 'color' or opt_name_down == 'colour' or opt_name_down == 'колір'
+            assign is_color_option = true
+          endif
         -%}
 
         {%- if variant_style == 'swatch' or block_settings.variant_style == 'buttons' -%}
@@ -64,11 +70,34 @@
                 <span class="variant-option__swatch-value">{{ product_option.selected_value }}</span>
               {%- endif %}
             </legend>
+
             {%- for product_option_value in product_option.values -%}
               {% if product_option_value.size > longest_value and option_id_attribute %}
                 {% assign longest_value = product_option_value.size %}
               {% endif %}
-              <label class="variant-option__button-label{% if variant_style == 'swatch' %} variant-option__button-label--has-swatch{% endif %}">
+
+              {%- liquid
+                assign swatch_color = product_option_value.swatch.color
+                if swatch_color == blank
+                  assign swatch_color = product_option_value | downcase | strip
+                endif
+                assign is_light = false
+                if swatch_color contains '#fff' or swatch_color == 'white' or swatch_color == 'білий'
+                  assign is_light = true
+                endif
+              -%}
+
+              <label
+                class="
+                  variant-option__button-label
+                  {% if variant_style == 'swatch' %} variant-option__button-label--has-swatch{% endif %}
+                  {% if is_color_option and block_settings.variant_style == 'buttons' %} variant-option__button-label--color{% endif %}
+                  {% if is_light and is_color_option and block_settings.variant_style == 'buttons' %} variant-option__button-label--light{% endif %}
+                "
+                {% if is_color_option and block_settings.variant_style == 'buttons' %}
+                  style="--swatch-color: {{ swatch_color | escape }};"
+                {% endif %}
+              >
                 <input
                   type="radio"
                   name="{{ product_option.name | escape }}-{{ block.id }}-{{ product_resource.id }}"
@@ -88,47 +117,76 @@
                     checked
                   {% endif %}
                 >
+
                 {% if variant_style == 'swatch' %}
                   {% liquid
                     assign featured_media = product_option_value.variant.featured_media
-
-                    # If the variant has no featured media, and we have a combined listing product, then fall back to
-                    # using the featured media of the child product that is linked to this option value.
                     if featured_media == blank and product_option_value.product_url
                       assign featured_media = product_option_value.variant.product.featured_media
                     endif
                   %}
-
                   {% render 'swatch',
                     swatch: product_option_value.swatch,
                     variant_image: featured_media,
                     mode: 'unscaled'
                   %}
                 {% else %}
-                  <span class="variant-option__button-label__text">{{ product_option_value | escape }}</span>
+                  {% if is_color_option %}
+                    <span class="color-dot" aria-hidden="true"></span>
+                    <span class="sr-only">{{ product_option_value | escape }}</span>
+                  {% else %}
+                    <span class="variant-option__button-label__text">{{ product_option_value | escape }}</span>
+                  {% endif %}
                 {% endif %}
+
                 {% render 'strikethrough-variant', product_option: product_option_value %}
               </label>
             {%- endfor -%}
+
             {% if option_id_attribute %}
               {% style %}
-                [data-option-id="{{ fieldset_id }}"] {
-                  --variant-ch: {{ longest_value }}ch;
-                }
+                [data-option-id="{{ fieldset_id }}"] { --variant-ch: {{ longest_value }}ch; }
               {% endstyle %}
             {% endif %}
+
+            {% style %}
+              .variant-option__button-label--color {
+                position: relative;
+                padding-left: 36px;
+                background: var(--swatch-color);
+                border: 1px solid transparent;
+                transition: filter 0.15s ease, box-shadow 0.15s ease, transform 0.02s ease;
+              }
+              .variant-option__button-label--color:hover {
+                filter: brightness(0.98);
+              }
+              .variant-option__button-label--color:active {
+                transform: translateY(1px);
+              }
+
+              .variant-option__button-label--color.variant-option__button-label--light {
+                color: #222;
+                border-color: #ddd;
+              }
+
+              .sr-only {
+                position: absolute !important;
+                width: 1px !important;
+                height: 1px !important;
+                padding: 0 !important;
+                margin: -1px !important;
+                overflow: hidden !important;
+                clip: rect(0, 0, 0, 0) !important;
+                white-space: nowrap !important;
+                border: 0 !important;
+              }
+            {% endstyle %}
           </fieldset>
         {%- elsif block_settings.variant_style == 'dropdowns' -%}
-          {%
-            # There is an opportunity to build a custom select component that will allow us to style the select element further (animation for dropdown, swatches shown in the dropdown options, etc)
-            # It's too bad as it mean rebuilding baked in behaviours but I think we've already done that for the locale selectors
-            # in dawn. So it might mean more time spent in setting it up but worth it for future updates/styling.
-          %}
           {% liquid
             assign property_being_updated = false
             if settings.variant_swatch_width != settings.variant_swatch_height
               assign property_being_updated = true
-              # (original width / original height) x new height (20px at the moment) = new width
               assign new_width = settings.variant_swatch_width | times: 1.0 | divided_by: settings.variant_swatch_height | times: 20
             endif
           %}
@@ -137,11 +195,7 @@
             <label for="Option-{{ block.id }}-{{ forloop.index0 }}">{{ product_option.name | escape }}</label>
             <div
               class="variant-option__select-wrapper"
-              style="
-                {%- if property_being_updated  -%}
-                  --variant-picker-swatch-width: clamp(10px,{{ new_width }}px, 50px);
-                {%- endif -%}
-              "
+              style="{% if property_being_updated %}--variant-picker-swatch-width: clamp(10px,{{ new_width }}px, 50px);{% endif %}"
             >
               <select
                 id="Option-{{ block.id }}-{{ forloop.index0 }}"
@@ -167,12 +221,7 @@
                   </option>
                 {%- endfor -%}
               </select>
-              <svg
-                aria-hidden="true"
-                focusable="false"
-                class="icon icon-caret"
-                viewBox="0 0 10 6"
-              >
+              <svg aria-hidden="true" focusable="false" class="icon icon-caret" viewBox="0 0 10 6">
                 {%- render 'icon', icon: 'caret' -%}
               </svg>
             </div>
@@ -194,7 +243,7 @@
 
   .variant-picker__form {
     display: flex;
-    flex-direction: column;
+    flex-direction: row !important;
     gap: var(--padding-lg);
     width: 100%;
   }
@@ -287,9 +336,7 @@
   }
 
   .variant-option--equal-width-buttons {
-    --variant-min-width: clamp(44px, calc(var(--variant-option-padding-inline) * 2 + var(--variant-ch)), 100%);
-
-    display: grid;
+    gap: 10px !important;
     grid-template-columns: repeat(auto-fit, minmax(var(--variant-min-width), 1fr));
 
     .variant-option__button-label {
@@ -321,13 +368,13 @@
 
   .variant-option__button-label:has(:checked) {
     color: var(--color-selected-variant-text);
-    background-color: var(--color-selected-variant-background);
+    /* background-color: var(--color-selected-variant-background); */
     border-color: var(--color-selected-variant-border);
     transition: background-color var(--animation-speed) var(--animation-easing),
       border-color var(--animation-speed) var(--animation-easing);
 
     &:hover {
-      background-color: var(--color-selected-variant-hover-background);
+      filter: brightness(85%);
       border-color: var(--color-selected-variant-hover-border);
       color: var(--color-selected-variant-hover-text);
     }
