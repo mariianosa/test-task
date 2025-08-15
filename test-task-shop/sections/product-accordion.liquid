@@ -38,7 +38,10 @@
              aria-labelledby="{{ ctrl_id }}-btn"
              hidden>
           <div class="p-accordion__content rte">
-            {{ content_html }}
+            <div class="p-accordion__text" data-lines="5">
+              {{ content_html }}
+            </div>
+            <button class="p-accordion__more" type="button" aria-expanded="false" hidden>…</button>
           </div>
         </div>
       </div>
@@ -60,14 +63,20 @@
   <style>
     .p-accordion-section {
       margin-block: 24px;
+      margin: 20px 63px;
     }
     .p-accordion__heading {
       margin-bottom: 12px;
       font-size: 1.25rem;
+      text-align: center;
     }
+    .p-accordion-section .p-accordion {
+      max-width: 820px;
+      margin-inline: auto;
+    }
+
     .p-accordion__trigger {
       margin: auto;
-      padding: auto;
       width: 80%;
       display: flex;
       align-items: center;
@@ -83,8 +92,40 @@
     .p-accordion__trigger[aria-expanded='true'] .p-accordion__icon {
       transform: rotate(180deg);
     }
+
     .p-accordion__panel {
       padding: 3px 125px 12px;
+    }
+    .p-accordion__panel[hidden] {
+      display: none !important;
+    }
+
+    .p-accordion__text {
+      overflow: visible;
+    }
+
+    @media (max-width: 750px) {
+      .p-accordion__text.is-clamped {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .p-accordion__more {
+        display: inline-flex;
+        align-items: center;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0;
+      }
+      .metafield-rich_text_field p {
+        font-size: 9px;
+      }
+      .p-accordion__panel {
+        padding: 3px 58px 12px;
+      }
     }
   </style>
 
@@ -95,6 +136,38 @@
 
       const sectionEl = container.closest('.p-accordion-section');
       const allowMultiple = sectionEl && sectionEl.dataset.allowMultiple === 'true';
+      const mq = window.matchMedia('(max-width: 750px)');
+
+      function initClampFor(panel) {
+        const wrap = panel.querySelector('.p-accordion__content');
+        if (!wrap) return;
+        const text = wrap.querySelector('.p-accordion__text');
+        const more = wrap.querySelector('.p-accordion__more');
+        if (!text || !more) return;
+
+        text.classList.remove('is-clamped');
+        text.style.removeProperty('-webkit-line-clamp');
+        more.hidden = true;
+        more.setAttribute('aria-expanded', 'false');
+
+        if (!mq.matches) return;
+
+        const lines = Number(text.dataset.lines || 5);
+        text.classList.add('is-clamped');
+        text.style.webkitLineClamp = String(lines);
+        requestAnimationFrame(() => {
+          const needClamp = text.scrollHeight > text.clientHeight + 1;
+          more.hidden = !needClamp;
+        });
+
+        more.onclick = (ev) => {
+          ev.stopPropagation();
+          text.classList.remove('is-clamped');
+          text.style.removeProperty('-webkit-line-clamp');
+          more.hidden = true;
+          more.setAttribute('aria-expanded', 'true');
+        };
+      }
 
       container.addEventListener('click', (e) => {
         const btn = e.target.closest('.p-accordion__trigger');
@@ -118,7 +191,16 @@
 
         btn.setAttribute('aria-expanded', String(!isOpen));
         panel.hidden = isOpen;
+        if (!isOpen) initClampFor(panel);
       });
+
+      container.querySelectorAll('.p-accordion__panel:not([hidden])').forEach(initClampFor);
+
+      function recheckOpenPanels() {
+        container.querySelectorAll('.p-accordion__panel:not([hidden])').forEach(initClampFor);
+      }
+      if (mq.addEventListener) mq.addEventListener('change', recheckOpenPanels);
+      else mq.addListener(recheckOpenPanels);
     })();
   </script>
 {%- endif -%}
@@ -128,8 +210,8 @@
   "name": "Product accordion",
   "tag": "section",
   "settings": [
-    { "type": "text", "id": "heading", "label": "Heading", "default": "Додаткова інформація" },
-    { "type": "checkbox", "id": "allow_multiple", "label": "Дозволити відкривати кілька", "default": false }
+    { "type": "text", "id": "heading", "label": "Heading", "default": "FAQ" },
+    { "type": "checkbox", "id": "allow_multiple", "label": "Allow open few", "default": false }
   ],
   "presets": [{ "name": "Product accordion (metaobject)" }]
 }
